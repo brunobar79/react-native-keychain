@@ -49,6 +49,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
     public static final String ACCESS_CONTROL_KEY = "accessControl";
     public static final String ACCESS_CONTROL_BIOMETRY_ANY = "BiometryAny";
     public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET = "BiometryCurrentSet";
+    public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE = "BiometryCurrentSetOrDevicePasscode";
 
     private final Map<String, CipherStorage> cipherStorageMap = new HashMap<>();
     private final PrefsStorage prefsStorage;
@@ -279,7 +280,9 @@ public class KeychainModule extends ReactContextBaseJavaModule {
     private boolean getUseBiometry(String accessControl) {
         return accessControl != null
             && (accessControl.equals(ACCESS_CONTROL_BIOMETRY_ANY)
-            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET));
+            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET)
+            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE)
+        );
     }
 
     // The "Current" CipherStorage is the cipherStorage with the highest API level that is lower than or equal to the current API level
