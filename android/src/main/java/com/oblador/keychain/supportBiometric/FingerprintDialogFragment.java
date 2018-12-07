@@ -312,10 +312,10 @@ public class FingerprintDialogFragment extends DialogFragment {
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-            updateFingerprintIcon(STATE_FINGERPRINT_ERROR);
-            mHandler.removeMessages(MSG_RESET_MESSAGE);
-            mErrorText.setTextColor(mErrorColor);
-            mErrorText.setText(msg);
+                updateFingerprintIcon(STATE_FINGERPRINT_ERROR);
+                mHandler.removeMessages(MSG_RESET_MESSAGE);
+                mErrorText.setTextColor(mErrorColor);
+                mErrorText.setText(msg);
             }
         });
 
@@ -327,10 +327,10 @@ public class FingerprintDialogFragment extends DialogFragment {
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-            updateFingerprintIcon(STATE_FINGERPRINT_ERROR);
-            mHandler.removeMessages(MSG_RESET_MESSAGE);
-            mErrorText.setTextColor(mErrorColor);
-            mErrorText.setText(msg);
+                updateFingerprintIcon(STATE_FINGERPRINT_ERROR);
+                mHandler.removeMessages(MSG_RESET_MESSAGE);
+                mErrorText.setTextColor(mErrorColor);
+                mErrorText.setText(msg);
             }
         });
 
@@ -346,9 +346,9 @@ public class FingerprintDialogFragment extends DialogFragment {
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-            updateFingerprintIcon(STATE_FINGERPRINT);
-            mErrorText.setTextColor(mTextColor);
-            mErrorText.setText(mContext.getString(R.string.fingerprint_dialog_touch_sensor));
+                updateFingerprintIcon(STATE_FINGERPRINT);
+                mErrorText.setTextColor(mTextColor);
+                mErrorText.setText(mContext.getString(R.string.fingerprint_dialog_touch_sensor));
             }
         });
     }

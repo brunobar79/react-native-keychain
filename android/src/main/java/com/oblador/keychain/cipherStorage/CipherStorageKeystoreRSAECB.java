@@ -205,6 +205,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
                 .setUserAuthenticationRequired(true)
                 .setUserAuthenticationValidityDurationSeconds(1)
                 .setKeySize(ENCRYPTION_KEY_SIZE)
+                .setIsStrongBoxBacked(true)
                 .build();
 
         KeyPairGenerator generator;

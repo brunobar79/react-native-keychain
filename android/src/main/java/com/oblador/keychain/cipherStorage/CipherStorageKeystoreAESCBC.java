@@ -32,8 +32,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.spec.IvParameterSpec;
 
 @TargetApi(Build.VERSION_CODES.M)
-public class
-CipherStorageKeystoreAESCBC implements CipherStorage {
+public class CipherStorageKeystoreAESCBC implements CipherStorage {
     public static final String CIPHER_STORAGE_NAME = "KeystoreAESCBC";
     public static final String DEFAULT_SERVICE = "RN_KEYCHAIN_DEFAULT_ALIAS";
     public static final String KEYSTORE_TYPE = "AndroidKeyStore";
