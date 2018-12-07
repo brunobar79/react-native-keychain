@@ -142,13 +142,13 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
         mBiometricPrompt = new BiometricPrompt((FragmentActivity) mActivity, Executors.newSingleThreadExecutor(), this);
         mBiometricPromptCancellationSignal = new CancellationSignal();
 
-        PromptInfo prompInfo = new PromptInfo.Builder()
+        PromptInfo promptInfo = new PromptInfo.Builder()
                 .setTitle("Authentication required")
                 .setNegativeButtonText("Cancel")
-                .setSubtitle("Please use biometric authentication to unlock the app")
+                .setSubtitle("Use your fingerprint to unlock the app")
                 .build();
 
-        mBiometricPrompt.authenticate(prompInfo);
+        mBiometricPrompt.authenticate(promptInfo);
     }
 
     @Override
