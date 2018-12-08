@@ -10,7 +10,6 @@ import android.os.CancellationSignal;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
-import android.security.keystore.StrongBoxUnavailableException;
 import android.security.keystore.UserNotAuthenticatedException;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -19,7 +18,6 @@ import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 
 import com.facebook.react.bridge.ReactApplicationContext;
-
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 import com.oblador.keychain.supportBiometric.BiometricPrompt;
@@ -48,7 +46,9 @@ import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 
-import static com.oblador.keychain.supportBiometric.BiometricPrompt.*;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.AuthenticationCallback;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.AuthenticationResult;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.PromptInfo;
 
 @RequiresApi(Build.VERSION_CODES.M)
 public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implements CipherStorage {
@@ -69,21 +69,6 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
   private KeyguardManager mKeyguardManager;
   private Context mContext;
   private Activity mActivity;
-
-  class CipherDecryptionParams {
-    public final DecryptionResultHandler resultHandler;
-    public final Key key;
-    public final byte[] username;
-    public final byte[] password;
-
-    public CipherDecryptionParams(DecryptionResultHandler handler, Key key, byte[] username, byte[] password) {
-      this.resultHandler = handler;
-      this.key = key;
-      this.username = username;
-      this.password = password;
-    }
-  }
-
   private CipherDecryptionParams mDecryptParams;
 
   public CipherStorageKeystoreRSAECB(ReactApplicationContext reactContext) {
@@ -231,7 +216,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     } catch (KeyStoreAccessException e) {
       throw new CryptoFailedException("Could not access Keystore", e);
     } catch (Exception e) {
-      Log.e("Keychain Module", e.getMessage());
+      Log.e("RNKeychainManager", e.getMessage());
       throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
     }
 
@@ -347,5 +332,19 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
   @Override
   public void setCurrentActivity(Activity activity) {
     mActivity = activity;
+  }
+
+  class CipherDecryptionParams {
+    public final DecryptionResultHandler resultHandler;
+    public final Key key;
+    public final byte[] username;
+    public final byte[] password;
+
+    public CipherDecryptionParams(DecryptionResultHandler handler, Key key, byte[] username, byte[] password) {
+      this.resultHandler = handler;
+      this.key = key;
+      this.username = username;
+      this.password = password;
+    }
   }
 }

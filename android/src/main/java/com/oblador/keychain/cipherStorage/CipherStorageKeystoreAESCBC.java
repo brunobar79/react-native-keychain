@@ -97,7 +97,7 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
       .setEncryptionPaddings(ENCRYPTION_PADDING)
       .setRandomizedEncryptionRequired(true)
       .setUserAuthenticationRequired(requireAuthentication ? requireAuthentication : false)
-      .setUserAuthenticationValidityDurationSeconds(-1)
+      .setUserAuthenticationValidityDurationSeconds(1)
       .setKeySize(ENCRYPTION_KEY_SIZE)
       .build();
 
