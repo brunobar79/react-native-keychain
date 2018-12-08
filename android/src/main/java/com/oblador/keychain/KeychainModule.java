@@ -2,11 +2,17 @@ package com.oblador.keychain;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.KeyguardManager;
+import android.content.Intent;
 import android.os.Build;
+import android.security.keystore.UserNotAuthenticatedException;
 import android.support.annotation.NonNull;
 import android.support.annotation.RequiresApi;
 import android.util.Log;
+import android.widget.Toast;
 
+import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.BaseActivityEventListener;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
@@ -51,16 +57,51 @@ public class KeychainModule extends ReactContextBaseJavaModule {
     public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET = "BiometryCurrentSet";
     public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE = "BiometryCurrentSetOrDevicePasscode";
 
+	private static final int REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS = 1;
+
     private final Map<String, CipherStorage> cipherStorageMap = new HashMap<>();
     private final PrefsStorage prefsStorage;
-    final ReactApplicationContext mReactContext;
+	private KeyguardManager mKeyguardManager;
+
+
+	private String mService;
+	private String mUsername;
+	private String mPassword;
+	private Promise mPromise;
+	private ReadableMap mOptions;
+	private String mCurrentAction;
+
+	final ReactApplicationContext mReactContext;
 
     @Override
     public String getName() {
         return KEYCHAIN_MODULE;
     }
 
-    public KeychainModule(ReactApplicationContext reactContext) {
+	private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
+
+		@Override
+		public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent intent) {
+			if (requestCode == REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS) {
+				// Challenge completed, proceed with using cipher
+				if (resultCode == Activity.RESULT_OK) {
+					if(mCurrentAction == "get"){
+						getGenericPasswordForOptions(mService, mPromise);
+					}else{
+						setGenericPasswordForOptions(mService, mUsername, mPassword, mOptions, mPromise);
+					}
+					Log.i(KEYCHAIN_MODULE, "SHOULD TRY AGAIN");
+				} else {
+					// The user canceled or didn’t complete the lock screen
+					// operation. Go to error/cancellation flow.
+					Log.e(KEYCHAIN_MODULE, "USER FUCKED UP");
+				}
+			}
+		}
+	};
+
+
+	public KeychainModule(ReactApplicationContext reactContext) {
         super(reactContext);
         prefsStorage = new PrefsStorage(reactContext);
         mReactContext = reactContext;
@@ -70,6 +111,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             addCipherStorageToMap(new CipherStorageKeystoreRSAECB(reactContext));
         }
+		reactContext.addActivityEventListener(mActivityEventListener);
     }
 
     private void addCipherStorageToMap(CipherStorage cipherStorage) {
@@ -91,22 +133,50 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             service = getDefaultServiceIfNull(service);
 
             CipherStorage currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
-
-            EncryptionResult result = currentCipherStorage.encrypt(service, username, password);
+			mKeyguardManager = (KeyguardManager) mReactContext.getSystemService(mReactContext.KEYGUARD_SERVICE);
+			EncryptionResult result = currentCipherStorage.encrypt(service, username, password, mKeyguardManager.isKeyguardSecure() ? accessControl : null);
             prefsStorage.storeEncryptedEntry(service, result);
 
             promise.resolve(true);
         } catch (EmptyParameterException e) {
             Log.e(KEYCHAIN_MODULE, e.getMessage());
             promise.reject(E_EMPTY_PARAMETERS, e);
-        } catch (CryptoFailedException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_CRYPTO_FAILED, e);
-        }
+		} catch (CryptoFailedException e) {
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+				if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+
+					mPromise = promise;
+					mUsername = username;
+					mPassword = password;
+					mOptions = options;
+					mCurrentAction = "set";
+
+					this.handleUserNotAuthenticatedException(promise);
+				} else {
+					Log.e(KEYCHAIN_MODULE, e.getMessage());
+					promise.reject(E_CRYPTO_FAILED, e);
+				}
+			}else {
+				Log.e(KEYCHAIN_MODULE, e.getMessage());
+				promise.reject(E_CRYPTO_FAILED, e);
+			}
+		}
     }
 
+    public void handleUserNotAuthenticatedException(Promise promise){
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+			Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent(null, null);
+			if (intent != null) {
+				Activity currentActivity = getCurrentActivity();
+				currentActivity.startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);
+			}
+		}else{
+			promise.reject(E_CRYPTO_FAILED, new Exception("no pin supported"));
+		}
+	}
+
     @ReactMethod
-    public void getGenericPasswordForOptions(String service, final Promise promise) {
+    public void getGenericPasswordForOptions(final String service, final Promise promise) {
         final String defaultService = getDefaultServiceIfNull(service);
         CipherStorage cipherStorage = null;
         try {
@@ -130,6 +200,10 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             }
 
             final CipherStorage currentCipherStorage = cipherStorage;
+            if(mKeyguardManager == null){
+				mKeyguardManager = (KeyguardManager) mReactContext.getSystemService(mReactContext.KEYGUARD_SERVICE);
+			}
+
             if (currentCipherStorage != null) {
                 DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
                     @Override
@@ -153,9 +227,9 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             else {
                 // The encrypted data is encrypted using an older CipherStorage, so we need to decrypt the data first, then encrypt it using the current CipherStorage, then store it again and return
                 final CipherStorage oldCipherStorage = getCipherStorageByName(resultSet.cipherStorageName);
-
+				final KeychainModule self = this;
                 DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
-                    @Override
+					@Override
                     public void onDecrypt(DecryptionResult decryptionResult, String error) {
                         if (decryptionResult != null) {
                             WritableMap credentials = Arguments.createMap();
@@ -168,16 +242,23 @@ public class KeychainModule extends ReactContextBaseJavaModule {
                                 // clean up the old cipher storage
                                 oldCipherStorage.removeKey(defaultService);
                                 // encrypt using the current cipher storage
-                                EncryptionResult encryptionResult = nonBiometryCipherStorage.encrypt(defaultService, decryptionResult.username, decryptionResult.password);
+                                EncryptionResult encryptionResult = nonBiometryCipherStorage.encrypt(defaultService, decryptionResult.username, decryptionResult.password, null);
                                 // store the encryption result
                                 prefsStorage.storeEncryptedEntry(defaultService, encryptionResult);
                             } catch (CryptoFailedException e) {
-                                Log.e(KEYCHAIN_MODULE, e.getMessage());
-                                promise.reject(E_CRYPTO_FAILED, e);
+								if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+									mService = service;
+									mPromise = promise;
+									mCurrentAction = "get";
+									self.handleUserNotAuthenticatedException(promise);
+								} else {
+									Log.e(KEYCHAIN_MODULE, e.getMessage());
+									promise.reject(E_CRYPTO_FAILED, e);
+								}
                             } catch (KeyStoreAccessException e) {
-                                Log.e(KEYCHAIN_MODULE, e.getMessage());
-                                promise.reject(E_KEYSTORE_ACCESS_ERROR, e);
-                            }
+								Log.e(KEYCHAIN_MODULE, e.getMessage());
+								promise.reject(E_KEYSTORE_ACCESS_ERROR, e);
+							}
 
                             promise.resolve(credentials);
                         } else {
@@ -196,10 +277,22 @@ public class KeychainModule extends ReactContextBaseJavaModule {
                   Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
               }
               promise.resolve(false);
-        } catch (CryptoFailedException e) {
-            Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_CRYPTO_FAILED, e);
-        }
+		} catch (CryptoFailedException e) {
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+				if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+					mService = service;
+					mPromise = promise;
+					mCurrentAction = "get";
+					this.handleUserNotAuthenticatedException(promise);
+				} else {
+					Log.e(KEYCHAIN_MODULE, e.getMessage());
+					promise.reject(E_CRYPTO_FAILED, e);
+				}
+			}else {
+				Log.e(KEYCHAIN_MODULE, e.getMessage());
+				promise.reject(E_CRYPTO_FAILED, e);
+			}
+		}
     }
 
     @ReactMethod
