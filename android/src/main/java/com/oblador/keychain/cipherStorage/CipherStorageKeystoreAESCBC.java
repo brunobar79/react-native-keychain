@@ -61,14 +61,16 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
     }
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException {
         service = getDefaultServiceIfEmpty(service);
+
+        Boolean usePasscode = accessControl != null && accessControl.contains("Passcode");
 
         try {
             KeyStore keyStore = getKeyStoreAndLoad();
 
             if (!keyStore.containsAlias(service)) {
-                generateKeyAndStoreUnderAlias(service);
+                generateKeyAndStoreUnderAlias(service, usePasscode);
             }
 
             Key key = keyStore.getKey(service, null);
@@ -80,20 +82,21 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
         } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException | UnrecoverableKeyException e) {
             throw new CryptoFailedException("Could not encrypt data for service " + service, e);
         } catch (KeyStoreException | KeyStoreAccessException e) {
-            throw new CryptoFailedException("Could not access Keystore for service " + service, e);
-        } catch (Exception e) {
+			throw new CryptoFailedException("Could not access Keystore for service " + service, e);
+		} catch (Exception e) {
             throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
         }
     }
 
-    private void generateKeyAndStoreUnderAlias(@NonNull String service) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+    private void generateKeyAndStoreUnderAlias(@NonNull String service, Boolean requireAuthentication) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
         AlgorithmParameterSpec spec = new KeyGenParameterSpec.Builder(
                 service,
                 KeyProperties.PURPOSE_DECRYPT | KeyProperties.PURPOSE_ENCRYPT)
                 .setBlockModes(ENCRYPTION_BLOCK_MODE)
                 .setEncryptionPaddings(ENCRYPTION_PADDING)
                 .setRandomizedEncryptionRequired(true)
-                //.setUserAuthenticationRequired(true) // Will throw InvalidAlgorithmParameterException if there is no fingerprint enrolled on the device
+				.setUserAuthenticationRequired(requireAuthentication ? requireAuthentication : false)
+				.setUserAuthenticationValidityDurationSeconds(-1)
                 .setKeySize(ENCRYPTION_KEY_SIZE)
                 .build();
 
