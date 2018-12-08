@@ -62,7 +62,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     ENCRYPTION_ALGORITHM + "/" +
       ENCRYPTION_BLOCK_MODE + "/" +
       ENCRYPTION_PADDING;
-  public static final int ENCRYPTION_KEY_SIZE = 2048;
+  public static final int ENCRYPTION_KEY_SIZE = 3072;
 
   private CancellationSignal mBiometricPromptCancellationSignal;
   private BiometricPrompt mBiometricPrompt;
@@ -172,6 +172,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     service = getDefaultServiceIfEmpty(service);
 
     try {
+      this.removeKey(service);
       KeyStore keyStore = getKeyStoreAndLoad();
 
       if (!keyStore.containsAlias(service)) {
@@ -205,7 +206,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
       .setEncryptionPaddings(ENCRYPTION_PADDING)
       .setRandomizedEncryptionRequired(true)
       .setUserAuthenticationRequired(true)
-      .setUserAuthenticationValidityDurationSeconds(2)
+      .setUserAuthenticationValidityDurationSeconds(1)
       .setKeySize(ENCRYPTION_KEY_SIZE)
       .build();
 

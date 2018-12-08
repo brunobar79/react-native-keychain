@@ -90,7 +90,7 @@ public class KeychainModule extends ReactContextBaseJavaModule {
 				} else {
 					// The user canceled or didn’t complete the lock screen
 					// operation. Go to error/cancellation flow.
-					mPromise.reject(E_USER_AUTH_FAILED, new Exception("User didn't authenticate"));
+					mPromise.reject(E_USER_AUTH_FAILED, new Exception("Error: Cancel"));
 				}
 			}
 		}

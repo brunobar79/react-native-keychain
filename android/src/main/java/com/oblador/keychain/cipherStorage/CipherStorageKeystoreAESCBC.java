@@ -33,6 +33,7 @@ import javax.crypto.spec.IvParameterSpec;
 
 @TargetApi(Build.VERSION_CODES.M)
 public class CipherStorageKeystoreAESCBC implements CipherStorage {
+  public static final String PASSCODE_KEYWORD = "Passcode";
   public static final String CIPHER_STORAGE_NAME = "KeystoreAESCBC";
   public static final String DEFAULT_SERVICE = "RN_KEYCHAIN_DEFAULT_ALIAS";
   public static final String KEYSTORE_TYPE = "AndroidKeyStore";
@@ -64,7 +65,7 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
   public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException {
     service = getDefaultServiceIfEmpty(service);
 
-    Boolean usePasscode = accessControl != null && accessControl.contains("Passcode");
+    Boolean usePasscode = accessControl != null && accessControl.contains(PASSCODE_KEYWORD);
 
     try {
       KeyStore keyStore = getKeyStoreAndLoad();
