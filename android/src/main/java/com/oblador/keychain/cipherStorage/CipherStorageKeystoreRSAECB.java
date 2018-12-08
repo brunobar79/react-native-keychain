@@ -1,348 +1,439 @@
-package com.oblador.keychain.cipherStorage;
+package com.oblador.keychain;
 
-import android.Manifest;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.KeyguardManager;
-import android.content.Context;
-import android.content.pm.PackageManager;
+import android.content.Intent;
 import android.os.Build;
-import android.os.CancellationSignal;
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyPermanentlyInvalidatedException;
-import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
-import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.widget.Toast;
 
+import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.BaseActivityEventListener;
+import com.facebook.react.bridge.Callback;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContextBaseJavaModule;
+import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableMap;
 
+import com.oblador.keychain.PrefsStorage.ResultSet;
+import com.oblador.keychain.cipherStorage.CipherStorage;
+import com.oblador.keychain.cipherStorage.CipherStorage.DecryptionResult;
+import com.oblador.keychain.cipherStorage.CipherStorage.EncryptionResult;
+import com.oblador.keychain.cipherStorage.CipherStorage.DecryptionResultHandler;
+import com.oblador.keychain.cipherStorage.CipherStorageFacebookConceal;
+import com.oblador.keychain.cipherStorage.CipherStorageKeystoreAESCBC;
+import com.oblador.keychain.cipherStorage.CipherStorageKeystoreRSAECB;
 import com.oblador.keychain.exceptions.CryptoFailedException;
+import com.oblador.keychain.exceptions.EmptyParameterException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
-import com.oblador.keychain.supportBiometric.BiometricPrompt;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.Key;
-import java.security.KeyFactory;
-import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.PublicKey;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
-import java.security.spec.AlgorithmParameterSpec;
-import java.security.spec.KeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.concurrent.Executors;
+import java.security.InvalidKeyException;
+import java.util.HashMap;
+import java.util.Map;
 
-import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.CipherOutputStream;
+public class KeychainModule extends ReactContextBaseJavaModule {
+    public static final String E_EMPTY_PARAMETERS = "E_EMPTY_PARAMETERS";
+    public static final String E_CRYPTO_FAILED = "E_CRYPTO_FAILED";
+    public static final String E_KEYSTORE_ACCESS_ERROR = "E_KEYSTORE_ACCESS_ERROR";
+    public static final String E_SUPPORTED_BIOMETRY_ERROR = "E_SUPPORTED_BIOMETRY_ERROR";
+    public static final String KEYCHAIN_MODULE = "RNKeychainManager";
+    public static final String FINGERPRINT_SUPPORTED_NAME = "Fingerprint";
+    public static final String EMPTY_STRING = "";
 
-import static com.oblador.keychain.supportBiometric.BiometricPrompt.*;
 
-@RequiresApi(Build.VERSION_CODES.M)
-public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implements CipherStorage {
-    public static final String CIPHER_STORAGE_NAME = "KeystoreRSAECB";
-    public static final String DEFAULT_SERVICE = "RN_KEYCHAIN_DEFAULT_ALIAS";
-    public static final String KEYSTORE_TYPE = "AndroidKeyStore";
-    public static final String ENCRYPTION_ALGORITHM = KeyProperties.KEY_ALGORITHM_RSA;
-    public static final String ENCRYPTION_BLOCK_MODE = KeyProperties.BLOCK_MODE_ECB;
-    public static final String ENCRYPTION_PADDING = KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1;
-    public static final String ENCRYPTION_TRANSFORMATION =
-            ENCRYPTION_ALGORITHM + "/" +
-                    ENCRYPTION_BLOCK_MODE + "/" +
-                    ENCRYPTION_PADDING;
-    public static final int ENCRYPTION_KEY_SIZE = 3072;
+    public static final String AUTHENTICATION_TYPE_KEY = "authenticationType";
+    public static final String AUTHENTICATION_TYPE_DEVICE_PASSCODE_OR_BIOMETRICS = "AuthenticationWithBiometricsDevicePasscode";
+    public static final String AUTHENTICATION_TYPE_BIOMETRICS = "AuthenticationWithBiometrics";
 
-    private CancellationSignal mBiometricPromptCancellationSignal;
-    private BiometricPrompt mBiometricPrompt;
-    private KeyguardManager mKeyguardManager;
-    private Context mContext;
-    private Activity mActivity;
+    public static final String ACCESS_CONTROL_KEY = "accessControl";
+    public static final String ACCESS_CONTROL_BIOMETRY_ANY = "BiometryAny";
+    public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET = "BiometryCurrentSet";
+    public static final String ACCESS_CONTROL_BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE = "BiometryCurrentSetOrDevicePasscode";
 
-    class CipherDecryptionParams {
-        public final DecryptionResultHandler resultHandler;
-        public final Key key;
-        public final byte[] username;
-        public final byte[] password;
+	private static final int REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS = 1;
 
-        public CipherDecryptionParams(DecryptionResultHandler handler, Key key, byte[] username, byte[] password) {
-            this.resultHandler = handler;
-            this.key = key;
-            this.username = username;
-            this.password = password;
-        }
-    }
+    private final Map<String, CipherStorage> cipherStorageMap = new HashMap<>();
+    private final PrefsStorage prefsStorage;
+	private KeyguardManager mKeyguardManager;
 
-    private CipherDecryptionParams mDecryptParams;
 
-    public CipherStorageKeystoreRSAECB(ReactApplicationContext reactContext) {
-        mContext = (Context) reactContext;
+	private String mService;
+	private String mUsername;
+	private String mPassword;
+	private Promise mPromise;
+	private ReadableMap mOptions;
+	private String mCurrentAction;
 
-        mKeyguardManager = (KeyguardManager) reactContext.getSystemService(Context.KEYGUARD_SERVICE);
-    }
+	final ReactApplicationContext mReactContext;
 
     @Override
-    public void onAuthenticationError(int errorCode, @Nullable CharSequence errString) {
-        if (mDecryptParams != null && mDecryptParams.resultHandler != null) {
-            mDecryptParams.resultHandler.onDecrypt(null, errString.toString());
-            mBiometricPromptCancellationSignal.cancel();
-            mDecryptParams = null;
-        }
+    public String getName() {
+        return KEYCHAIN_MODULE;
     }
 
-    @Override
-    public void onAuthenticationFailed() {
-        if (mDecryptParams != null && mDecryptParams.resultHandler != null) {
-            mDecryptParams.resultHandler.onDecrypt(null, "Authentication failed.");
-            mBiometricPromptCancellationSignal.cancel();
-            mDecryptParams = null;
+	private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
+
+		@Override
+		public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent intent) {
+			if (requestCode == REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS) {
+				// Challenge completed, proceed with using cipher
+				if (resultCode == Activity.RESULT_OK) {
+					if(mCurrentAction == "get"){
+						getGenericPasswordForOptions(mService, mPromise);
+					}else{
+						setGenericPasswordForOptions(mService, mUsername, mPassword, mOptions, mPromise);
+					}
+					Log.i(KEYCHAIN_MODULE, "SHOULD TRY AGAIN");
+				} else {
+					// The user canceled or didn’t complete the lock screen
+					// operation. Go to error/cancellation flow.
+					Log.e(KEYCHAIN_MODULE, "USER FUCKED UP");
+				}
+			}
+		}
+	};
+
+
+	public KeychainModule(ReactApplicationContext reactContext) {
+        super(reactContext);
+        prefsStorage = new PrefsStorage(reactContext);
+        mReactContext = reactContext;
+
+        addCipherStorageToMap(new CipherStorageFacebookConceal(reactContext));
+        addCipherStorageToMap(new CipherStorageKeystoreAESCBC());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            addCipherStorageToMap(new CipherStorageKeystoreRSAECB(reactContext));
         }
+		reactContext.addActivityEventListener(mActivityEventListener);
     }
 
-    @Override
-    public void onAuthenticationSucceeded(@NonNull AuthenticationResult result) {
-        if (mDecryptParams != null && mDecryptParams.resultHandler != null) {
+    private void addCipherStorageToMap(CipherStorage cipherStorage) {
+        cipherStorageMap.put(cipherStorage.getCipherStorageName(), cipherStorage);
+    }
+
+    @ReactMethod
+    public void setGenericPasswordForOptions(String service, String username, String password, ReadableMap options, Promise promise) {
+        try {
+            if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+                throw new EmptyParameterException("you passed empty or null username/password");
+            }
+
+            String accessControl = null;
+            if (options != null && options.hasKey(ACCESS_CONTROL_KEY)) {
+                accessControl = options.getString(ACCESS_CONTROL_KEY);
+            }
+
+            service = getDefaultServiceIfNull(service);
+
+            CipherStorage currentCipherStorage = getCipherStorageForCurrentAPILevel(getUseBiometry(accessControl));
+			mKeyguardManager = (KeyguardManager) mReactContext.getSystemService(mReactContext.KEYGUARD_SERVICE);
+			EncryptionResult result = currentCipherStorage.encrypt(service, username, password, mKeyguardManager.isKeyguardSecure() ? accessControl : null);
+            prefsStorage.storeEncryptedEntry(service, result);
+
+            promise.resolve(true);
+        } catch (EmptyParameterException e) {
+            Log.e(KEYCHAIN_MODULE, e.getMessage());
+            promise.reject(E_EMPTY_PARAMETERS, e);
+		} catch (CryptoFailedException e) {
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+				if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+
+					mPromise = promise;
+					mUsername = username;
+					mPassword = password;
+					mOptions = options;
+					mCurrentAction = "set";
+
+					this.handleUserNotAuthenticatedException(promise);
+				} else {
+					Log.e(KEYCHAIN_MODULE, e.getMessage());
+					promise.reject(E_CRYPTO_FAILED, e);
+				}
+			}else {
+				Log.e(KEYCHAIN_MODULE, e.getMessage());
+				promise.reject(E_CRYPTO_FAILED, e);
+			}
+		}
+    }
+
+    public void handleUserNotAuthenticatedException(Promise promise){
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+			Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent(null, null);
+			if (intent != null) {
+				Activity currentActivity = getCurrentActivity();
+				currentActivity.startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);
+			}
+		}else{
+			promise.reject(E_CRYPTO_FAILED, new Exception("no pin supported"));
+		}
+	}
+
+    @ReactMethod
+    public void getGenericPasswordForOptions(final String service, final Promise promise) {
+        final String defaultService = getDefaultServiceIfNull(service);
+        CipherStorage cipherStorage = null;
+        try {
+            ResultSet resultSet = prefsStorage.getEncryptedEntry(defaultService);
+            if (resultSet == null) {
+                Log.e(KEYCHAIN_MODULE, "No entry found for service: " + defaultService);
+                promise.resolve(false);
+                return;
+            }
+
+            // Android < M will throw an exception as biometry is not supported.
+            CipherStorage biometryCipherStorage = null;
             try {
-                String decryptedUsername = decryptBytes(mDecryptParams.key, mDecryptParams.username);
-                String decryptedPassword = decryptBytes(mDecryptParams.key, mDecryptParams.password);
-                mDecryptParams.resultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
-            } catch (Exception e) {
-                mDecryptParams.resultHandler.onDecrypt(null, e.getMessage());
-            }
-            mDecryptParams = null;
-        }
-    }
-
-    private boolean canStartFingerprintAuthentication() {
-        return (mKeyguardManager.isKeyguardSecure() &&
-                (mContext.checkSelfPermission(Manifest.permission.USE_BIOMETRIC) == PackageManager.PERMISSION_GRANTED
-                || mContext.checkSelfPermission(Manifest.permission.USE_FINGERPRINT) == PackageManager.PERMISSION_GRANTED));
-    }
-
-    private void startFingerprintAuthentication() throws Exception {
-        // If we have a previous cancellationSignal, cancel it.
-        if (mBiometricPromptCancellationSignal != null) {
-            mBiometricPromptCancellationSignal.cancel();
-        }
-
-        if (mActivity == null) {
-            throw new Exception("mActivity is null (make sure to call setCurrentActivity)");
-        }
-
-        mBiometricPrompt = new BiometricPrompt((FragmentActivity) mActivity, Executors.newSingleThreadExecutor(), this);
-        mBiometricPromptCancellationSignal = new CancellationSignal();
-
-        PromptInfo promptInfo = new PromptInfo.Builder()
-                .setTitle("Authentication required")
-                .setNegativeButtonText("Cancel")
-                .setSubtitle("Use your fingerprint to unlock the app")
-                .build();
-
-        mBiometricPrompt.authenticate(promptInfo);
-    }
-
-    @Override
-    public String getCipherStorageName() {
-        return CIPHER_STORAGE_NAME;
-    }
-
-    @Override
-    public boolean getCipherBiometrySupported() {
-        return true;
-    }
-
-    @Override
-    public int getMinSupportedApiLevel() {
-        return Build.VERSION_CODES.M;
-    }
-
-    @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
-        service = getDefaultServiceIfEmpty(service);
-
-        try {
-            KeyStore keyStore = getKeyStoreAndLoad();
-
-            if (!keyStore.containsAlias(service)) {
-                generateKeyAndStoreUnderAlias(service);
+                biometryCipherStorage = getCipherStorageForCurrentAPILevel(true);
+            } catch(Exception e) { }
+            final CipherStorage nonBiometryCipherStorage = getCipherStorageForCurrentAPILevel(false);
+            if (biometryCipherStorage != null && resultSet.cipherStorageName.equals(biometryCipherStorage.getCipherStorageName())) {
+                cipherStorage = biometryCipherStorage;
+            } else if (nonBiometryCipherStorage != null && resultSet.cipherStorageName.equals(nonBiometryCipherStorage.getCipherStorageName())) {
+                cipherStorage = nonBiometryCipherStorage;
             }
 
-            KeyFactory keyFactory = KeyFactory.getInstance(ENCRYPTION_ALGORITHM);
-            PublicKey publicKey = keyStore.getCertificate(service).getPublicKey();
-            KeySpec spec = new X509EncodedKeySpec(publicKey.getEncoded());
-            Key key = keyFactory.generatePublic(spec);
+            final CipherStorage currentCipherStorage = cipherStorage;
+            if(mKeyguardManager == null){
+				mKeyguardManager = (KeyguardManager) mReactContext.getSystemService(mReactContext.KEYGUARD_SERVICE);
+			}
 
-            byte[] encryptedUsername = encryptString(key, service, username);
-            byte[] encryptedPassword = encryptString(key, service, password);
+            if (currentCipherStorage != null) {
+                DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
+                    @Override
+                    public void onDecrypt(DecryptionResult decryptionResult, String error) {
+                        if (decryptionResult != null) {
+                            WritableMap credentials = Arguments.createMap();
 
-            return new EncryptionResult(encryptedUsername, encryptedPassword, this);
-        } catch (NoSuchAlgorithmException | InvalidAlgorithmParameterException | NoSuchProviderException e) {
-            throw new CryptoFailedException("Could not encrypt data for service " + service, e);
-        } catch (KeyStoreException | KeyStoreAccessException e) {
-            throw new CryptoFailedException("Could not access Keystore for service " + service, e);
-        } catch (Exception e) {
-            throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
-        }
+                            credentials.putString("service", defaultService);
+                            credentials.putString("username", decryptionResult.username);
+                            credentials.putString("password", decryptionResult.password);
+
+                            promise.resolve(credentials);
+                        } else {
+                            promise.reject(E_CRYPTO_FAILED, error);
+                        }
+                    }
+                };
+                // The encrypted data is encrypted using the current CipherStorage, so we just decrypt and return
+                currentCipherStorage.decrypt(decryptionHandler, defaultService, resultSet.usernameBytes, resultSet.passwordBytes);
+            }
+            else {
+                // The encrypted data is encrypted using an older CipherStorage, so we need to decrypt the data first, then encrypt it using the current CipherStorage, then store it again and return
+                final CipherStorage oldCipherStorage = getCipherStorageByName(resultSet.cipherStorageName);
+				final KeychainModule self = this;
+                DecryptionResultHandler decryptionHandler = new DecryptionResultHandler() {
+					@Override
+                    public void onDecrypt(DecryptionResult decryptionResult, String error) {
+                        if (decryptionResult != null) {
+                            WritableMap credentials = Arguments.createMap();
+
+                            credentials.putString("service", defaultService);
+                            credentials.putString("username", decryptionResult.username);
+                            credentials.putString("password", decryptionResult.password);
+
+                            try {
+                                // clean up the old cipher storage
+                                oldCipherStorage.removeKey(defaultService);
+                                // encrypt using the current cipher storage
+                                EncryptionResult encryptionResult = nonBiometryCipherStorage.encrypt(defaultService, decryptionResult.username, decryptionResult.password, null);
+                                // store the encryption result
+                                prefsStorage.storeEncryptedEntry(defaultService, encryptionResult);
+                            } catch (CryptoFailedException e) {
+								if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+									mService = service;
+									mPromise = promise;
+									mCurrentAction = "get";
+									self.handleUserNotAuthenticatedException(promise);
+								} else {
+									Log.e(KEYCHAIN_MODULE, e.getMessage());
+									promise.reject(E_CRYPTO_FAILED, e);
+								}
+                            } catch (KeyStoreAccessException e) {
+								Log.e(KEYCHAIN_MODULE, e.getMessage());
+								promise.reject(E_KEYSTORE_ACCESS_ERROR, e);
+							}
+
+                            promise.resolve(credentials);
+                        } else {
+                            promise.reject(E_CRYPTO_FAILED, error);
+                        }
+                    }
+                };
+                // decrypt using the older cipher storage
+                oldCipherStorage.decrypt(decryptionHandler, defaultService, resultSet.usernameBytes, resultSet.passwordBytes);
+            }
+          } catch (InvalidKeyException e) {
+              Log.e(KEYCHAIN_MODULE, String.format("Key for service %s permanently invalidated", defaultService));
+               try {
+                   cipherStorage.removeKey(defaultService);
+              } catch (Exception error) {
+                  Log.e(KEYCHAIN_MODULE, "Failed removing invalidated key: " + error.getMessage());
+              }
+              promise.resolve(false);
+		} catch (CryptoFailedException e) {
+			if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+				if( e.getCause().getCause()!=null && e.getCause().getCause().getMessage() == "User not authenticated"){
+					mService = service;
+					mPromise = promise;
+					mCurrentAction = "get";
+					this.handleUserNotAuthenticatedException(promise);
+				} else {
+					Log.e(KEYCHAIN_MODULE, e.getMessage());
+					promise.reject(E_CRYPTO_FAILED, e);
+				}
+			}else {
+				Log.e(KEYCHAIN_MODULE, e.getMessage());
+				promise.reject(E_CRYPTO_FAILED, e);
+			}
+		}
     }
 
-    private void generateKeyAndStoreUnderAlias(@NonNull String service) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
-        AlgorithmParameterSpec spec = new KeyGenParameterSpec.Builder(
-                service,
-                KeyProperties.PURPOSE_DECRYPT | KeyProperties.PURPOSE_ENCRYPT)
-                .setBlockModes(ENCRYPTION_BLOCK_MODE)
-                .setEncryptionPaddings(ENCRYPTION_PADDING)
-                .setRandomizedEncryptionRequired(true)
-                .setUserAuthenticationRequired(true)
-                .setUserAuthenticationValidityDurationSeconds(1)
-                .setKeySize(ENCRYPTION_KEY_SIZE)
-                .setIsStrongBoxBacked(true)
-                .build();
-
-        KeyPairGenerator generator;
-        generator = KeyPairGenerator.getInstance(ENCRYPTION_ALGORITHM, KEYSTORE_TYPE);
-        generator.initialize(spec);
-        generator.generateKeyPair();
-    }
-
-    @Override
-    public void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException {
-        service = getDefaultServiceIfEmpty(service);
-
-        KeyStore keyStore;
-        Key key;
-
+    @ReactMethod
+    public void resetGenericPasswordForOptions(String service, Promise promise) {
         try {
-            keyStore = getKeyStoreAndLoad();
-            key = keyStore.getKey(service, null);
-        } catch (KeyStoreException | UnrecoverableKeyException | NoSuchAlgorithmException e) {
-            throw new CryptoFailedException("Could not get key from Keystore", e);
+            service = getDefaultServiceIfNull(service);
+
+            // First we clean up the cipher storage (using the cipher storage that was used to store the entry)
+            ResultSet resultSet = prefsStorage.getEncryptedEntry(service);
+            if (resultSet != null) {
+                CipherStorage cipherStorage = getCipherStorageByName(resultSet.cipherStorageName);
+                if (cipherStorage != null) {
+                    cipherStorage.removeKey(service);
+                }
+            }
+            // And then we remove the entry in the shared preferences
+            prefsStorage.removeEntry(service);
+
+            promise.resolve(true);
         } catch (KeyStoreAccessException e) {
-            throw new CryptoFailedException("Could not access Keystore", e);
-        } catch (Exception e) {
-            throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
+            Log.e(KEYCHAIN_MODULE, e.getMessage());
+            promise.reject(E_KEYSTORE_ACCESS_ERROR, e);
+        }
+    }
+
+    @ReactMethod
+    public void hasInternetCredentialsForServer(@NonNull String server, Promise promise) {
+        final String defaultService = getDefaultServiceIfNull(server);
+
+        ResultSet resultSet = prefsStorage.getEncryptedEntry(defaultService);
+        if (resultSet == null) {
+            Log.e(KEYCHAIN_MODULE, "No entry found for service: " + defaultService);
+            promise.resolve(false);
+           return;
         }
 
-        String decryptedUsername;
-        String decryptedPassword;
-        try {
-            // try to get a Cipher, if exception is thrown, authentication is needed
-            decryptedUsername = decryptBytes(key, username);
-            decryptedPassword = decryptBytes(key, password);
-        } catch (UserNotAuthenticatedException e) {
-            mDecryptParams = new CipherDecryptionParams(decryptionResultHandler, key, username, password);
-            if (!canStartFingerprintAuthentication()) {
-                throw new CryptoFailedException("Could not start fingerprint Authentication");
-            }
-            try {
-                startFingerprintAuthentication();
-            } catch (Exception e1) {
-                throw new CryptoFailedException("Could not start fingerprint Authentication", e1);
-            }
+        promise.resolve(true);
+    }
+
+    @ReactMethod
+    public void setInternetCredentialsForServer(@NonNull String server, String username, String password, ReadableMap options, Promise promise) {
+        setGenericPasswordForOptions(server, username, password, options, promise);
+    }
+
+    @ReactMethod
+    public void getInternetCredentialsForServer(@NonNull String server, ReadableMap unusedOptions, Promise promise) {
+        getGenericPasswordForOptions(server, promise);
+    }
+
+    @ReactMethod
+    public void resetInternetCredentialsForServer(@NonNull String server, ReadableMap unusedOptions, Promise promise) {
+        resetGenericPasswordForOptions(server, promise);
+    }
+
+    @ReactMethod
+    public void canCheckAuthentication(ReadableMap options, Promise promise) {
+        String authenticationType = null;
+        if (options != null && options.hasKey(AUTHENTICATION_TYPE_KEY)) {
+            authenticationType = options.getString(AUTHENTICATION_TYPE_KEY);
+        }
+
+        if (authenticationType == null
+                || (!authenticationType.equals(AUTHENTICATION_TYPE_DEVICE_PASSCODE_OR_BIOMETRICS)
+                && !authenticationType.equals(AUTHENTICATION_TYPE_BIOMETRICS))) {
+            promise.resolve(false);
             return;
         }
 
-        decryptionResultHandler.onDecrypt(new DecryptionResult(decryptedUsername, decryptedPassword), null);
+        try {
+            boolean fingerprintAuthAvailable = isFingerprintAuthAvailable();
+            promise.resolve(fingerprintAuthAvailable);
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
     }
 
-    @Override
-    public void removeKey(@NonNull String service) throws KeyStoreAccessException {
-        service = getDefaultServiceIfEmpty(service);
-
+    @ReactMethod
+    public void getSupportedBiometryType(Promise promise) {
         try {
-            KeyStore keyStore = getKeyStoreAndLoad();
-            if (keyStore.containsAlias(service)) {
-                keyStore.deleteEntry(service);
+            boolean fingerprintAuthAvailable = isFingerprintAuthAvailable();
+            if (fingerprintAuthAvailable) {
+                promise.resolve(FINGERPRINT_SUPPORTED_NAME);
+            } else {
+                promise.resolve(null);
             }
-        } catch (KeyStoreException e) {
-            throw new KeyStoreAccessException("Failed to access Keystore", e);
         } catch (Exception e) {
-            throw new KeyStoreAccessException("Unknown error " + e.getMessage(), e);
+            Log.e(KEYCHAIN_MODULE, e.getMessage());
+            promise.reject(E_SUPPORTED_BIOMETRY_ERROR, e);
         }
     }
 
-    private byte[] encryptString(Key key, String service, String value) throws CryptoFailedException {
-        try {
-            Cipher cipher = Cipher.getInstance(ENCRYPTION_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, key);
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            // encrypt the value using a CipherOutputStream
-            CipherOutputStream cipherOutputStream = new CipherOutputStream(outputStream, cipher);
-            cipherOutputStream.write(value.getBytes("UTF-8"));
-            cipherOutputStream.close();
-            return outputStream.toByteArray();
-        } catch (Exception e) {
-            throw new CryptoFailedException("Could not encrypt value for service " + service, e);
-        }
+    private boolean getUseBiometry(String accessControl) {
+        return accessControl != null
+            && (accessControl.equals(ACCESS_CONTROL_BIOMETRY_ANY)
+            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET)
+            || accessControl.equals(ACCESS_CONTROL_BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE)
+        );
     }
 
-    private Cipher getDecryptionCipher(Key key) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
-        try {
-            Cipher cipher = Cipher.getInstance(ENCRYPTION_TRANSFORMATION);
-            // read the initialization vector from the beginning of the stream
-            cipher.init(Cipher.DECRYPT_MODE, key);
-
-            return cipher;
-        } catch (UserNotAuthenticatedException | KeyPermanentlyInvalidatedException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new CryptoFailedException("Could not generate cipher", e);
-        }
-    }
-
-    private String decryptBytes(Key key, byte[] bytes) throws CryptoFailedException, UserNotAuthenticatedException, KeyPermanentlyInvalidatedException {
-        try {
-            Cipher cipher = getDecryptionCipher(key);
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(bytes);
-            // decrypt the bytes using a CipherInputStream
-            CipherInputStream cipherInputStream = new CipherInputStream(
-                    inputStream, cipher);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            byte[] buffer = new byte[1024];
-            while (true) {
-                int n = cipherInputStream.read(buffer, 0, buffer.length);
-                if (n <= 0) {
-                    break;
-                }
-                output.write(buffer, 0, n);
+    // The "Current" CipherStorage is the cipherStorage with the highest API level that is lower than or equal to the current API level
+    private CipherStorage getCipherStorageForCurrentAPILevel(boolean useBiometry) throws CryptoFailedException {
+        int currentAPILevel = Build.VERSION.SDK_INT;
+        CipherStorage currentCipherStorage = null;
+        for (CipherStorage cipherStorage : cipherStorageMap.values()) {
+            int cipherStorageAPILevel = cipherStorage.getMinSupportedApiLevel();
+            boolean biometrySupported = cipherStorage.getCipherBiometrySupported();
+            // Is the cipherStorage supported on the current API level?
+            boolean isSupported = (cipherStorageAPILevel <= currentAPILevel)
+                    && (biometrySupported == useBiometry);
+            // Is the API level better than the one we previously selected (if any)?
+            if (isSupported && (currentCipherStorage == null || cipherStorageAPILevel > currentCipherStorage.getMinSupportedApiLevel())) {
+                currentCipherStorage = cipherStorage;
             }
-            return new String(output.toByteArray(), Charset.forName("UTF-8"));
-        } catch (IOException e) {
-            throw new CryptoFailedException("Could not decrypt bytes", e);
         }
+        if (currentCipherStorage == null) {
+            throw new CryptoFailedException("Unsupported Android SDK " + Build.VERSION.SDK_INT);
+        }
+
+        if (currentCipherStorage.getRequiresCurrentActivity()) {
+            currentCipherStorage.setCurrentActivity(getCurrentActivity());
+        }
+
+        return currentCipherStorage;
     }
 
-    private KeyStore getKeyStoreAndLoad() throws KeyStoreException, KeyStoreAccessException {
-        try {
-            KeyStore keyStore = KeyStore.getInstance(KEYSTORE_TYPE);
-            keyStore.load(null);
-            return keyStore;
-        } catch (NoSuchAlgorithmException | CertificateException | IOException e) {
-            throw new KeyStoreAccessException("Could not access Keystore", e);
+    private CipherStorage getCipherStorageByName(String cipherStorageName) {
+        CipherStorage storage = cipherStorageMap.get(cipherStorageName);
+
+        if (storage.getRequiresCurrentActivity()) {
+            storage.setCurrentActivity(getCurrentActivity());
         }
+
+        return storage;
+    }
+
+    private boolean isFingerprintAuthAvailable() {
+        return DeviceAvailability.isFingerprintAuthAvailable(getReactApplicationContext());
     }
 
     @NonNull
-    private String getDefaultServiceIfEmpty(@NonNull String service) {
-        return service.isEmpty() ? DEFAULT_SERVICE : service;
-    }
-
-    @Override
-    public boolean getRequiresCurrentActivity() {
-        return true;
-    }
-
-    @Override
-    public void setCurrentActivity(Activity activity) {
-      mActivity = activity;
+    private String getDefaultServiceIfNull(String service) {
+        return service == null ? EMPTY_STRING : service;
     }
 }
