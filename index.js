@@ -185,7 +185,8 @@ export function getGenericPassword(
   serviceOrOptions?: string | Options
 ): Promise {
   return RNKeychainManager.getGenericPasswordForOptions(
-    getOptionsArgument(serviceOrOptions),
+	getOptionsArgument(serviceOrOptions),
+	serviceOrOptions
   );
 }
 

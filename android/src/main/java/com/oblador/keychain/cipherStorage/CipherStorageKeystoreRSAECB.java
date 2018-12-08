@@ -1,7 +1,6 @@
 package com.oblador.keychain.cipherStorage;
 
 import android.Manifest;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Context;
@@ -16,9 +15,10 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.FragmentActivity;
+import android.util.Log;
 
 import com.facebook.react.bridge.ReactApplicationContext;
-
+import com.facebook.react.bridge.ReadableMap;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 import com.oblador.keychain.supportBiometric.BiometricPrompt;
@@ -47,7 +47,9 @@ import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.CipherOutputStream;
 
-import static com.oblador.keychain.supportBiometric.BiometricPrompt.*;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.AuthenticationCallback;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.AuthenticationResult;
+import static com.oblador.keychain.supportBiometric.BiometricPrompt.PromptInfo;
 
 @RequiresApi(Build.VERSION_CODES.M)
 public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implements CipherStorage {
@@ -57,6 +59,9 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     public static final String ENCRYPTION_ALGORITHM = KeyProperties.KEY_ALGORITHM_RSA;
     public static final String ENCRYPTION_BLOCK_MODE = KeyProperties.BLOCK_MODE_ECB;
     public static final String ENCRYPTION_PADDING = KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1;
+    public static final String FINGERPRINT_PROMPT_TITLE_KEY = "fingerprintPromptTitle";
+    public static final String FINGERPRINT_PROMPT_DESC_KEY = "fingerprintPromptDesc";
+    public static final String FINGERPRINT_PROMPT_CANCEL_KEY = "fingerprintPromptCancel";
     public static final String ENCRYPTION_TRANSFORMATION =
             ENCRYPTION_ALGORITHM + "/" +
                     ENCRYPTION_BLOCK_MODE + "/" +
@@ -68,22 +73,11 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     private KeyguardManager mKeyguardManager;
     private Context mContext;
     private Activity mActivity;
-
-    class CipherDecryptionParams {
-        public final DecryptionResultHandler resultHandler;
-        public final Key key;
-        public final byte[] username;
-        public final byte[] password;
-
-        public CipherDecryptionParams(DecryptionResultHandler handler, Key key, byte[] username, byte[] password) {
-            this.resultHandler = handler;
-            this.key = key;
-            this.username = username;
-            this.password = password;
-        }
-    }
-
     private CipherDecryptionParams mDecryptParams;
+
+    private String mTitle = "Authentication required";
+    private String mCancel = "Cancel";
+    private String mSubtitle = "Use your fingerprint to unlock the app";
 
     public CipherStorageKeystoreRSAECB(ReactApplicationContext reactContext) {
         mContext = (Context) reactContext;
@@ -126,7 +120,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     private boolean canStartFingerprintAuthentication() {
         return (mKeyguardManager.isKeyguardSecure() &&
                 (mContext.checkSelfPermission(Manifest.permission.USE_BIOMETRIC) == PackageManager.PERMISSION_GRANTED
-                || mContext.checkSelfPermission(Manifest.permission.USE_FINGERPRINT) == PackageManager.PERMISSION_GRANTED));
+                        || mContext.checkSelfPermission(Manifest.permission.USE_FINGERPRINT) == PackageManager.PERMISSION_GRANTED));
     }
 
     private void startFingerprintAuthentication() throws Exception {
@@ -143,9 +137,9 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
         mBiometricPromptCancellationSignal = new CancellationSignal();
 
         PromptInfo promptInfo = new PromptInfo.Builder()
-                .setTitle("Authentication required")
-                .setNegativeButtonText("Cancel")
-                .setSubtitle("Use your fingerprint to unlock the app")
+                .setTitle(mTitle)
+                .setNegativeButtonText(mCancel)
+                .setSubtitle(mSubtitle)
                 .build();
 
         mBiometricPrompt.authenticate(promptInfo);
@@ -167,10 +161,11 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException {
         service = getDefaultServiceIfEmpty(service);
 
         try {
+            this.removeKey(service);
             KeyStore keyStore = getKeyStoreAndLoad();
 
             if (!keyStore.containsAlias(service)) {
@@ -196,7 +191,8 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     private void generateKeyAndStoreUnderAlias(@NonNull String service) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
-        AlgorithmParameterSpec spec = new KeyGenParameterSpec.Builder(
+        AlgorithmParameterSpec spec = null;
+        spec = new KeyGenParameterSpec.Builder(
                 service,
                 KeyProperties.PURPOSE_DECRYPT | KeyProperties.PURPOSE_ENCRYPT)
                 .setBlockModes(ENCRYPTION_BLOCK_MODE)
@@ -205,7 +201,6 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
                 .setUserAuthenticationRequired(true)
                 .setUserAuthenticationValidityDurationSeconds(1)
                 .setKeySize(ENCRYPTION_KEY_SIZE)
-                .setIsStrongBoxBacked(true)
                 .build();
 
         KeyPairGenerator generator;
@@ -229,6 +224,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
         } catch (KeyStoreAccessException e) {
             throw new CryptoFailedException("Could not access Keystore", e);
         } catch (Exception e) {
+            Log.e("RNKeychainManager", e.getMessage());
             throw new CryptoFailedException("Unknown error: " + e.getMessage(), e);
         }
 
@@ -343,6 +339,38 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
 
     @Override
     public void setCurrentActivity(Activity activity) {
-      mActivity = activity;
+        mActivity = activity;
+    }
+
+    class CipherDecryptionParams {
+        public final DecryptionResultHandler resultHandler;
+        public final Key key;
+        public final byte[] username;
+        public final byte[] password;
+
+        public CipherDecryptionParams(DecryptionResultHandler handler, Key key, byte[] username, byte[] password) {
+            this.resultHandler = handler;
+            this.key = key;
+            this.username = username;
+            this.password = password;
+        }
+    }
+
+    @Override
+    public final void setPromptText(ReadableMap options) {
+
+        if (options != null) {
+            if (options.hasKey(FINGERPRINT_PROMPT_TITLE_KEY)) {
+                mTitle = options.getString(FINGERPRINT_PROMPT_TITLE_KEY);
+            }
+
+            if (options.hasKey(FINGERPRINT_PROMPT_DESC_KEY)) {
+                mSubtitle = options.getString(FINGERPRINT_PROMPT_DESC_KEY);
+            }
+
+            if (options.hasKey(FINGERPRINT_PROMPT_CANCEL_KEY)) {
+                mCancel = options.getString(FINGERPRINT_PROMPT_CANCEL_KEY);
+            }
+        }
     }
 }

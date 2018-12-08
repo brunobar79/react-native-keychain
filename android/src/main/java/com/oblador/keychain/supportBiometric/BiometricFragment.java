@@ -34,6 +34,7 @@ import java.util.concurrent.Executor;
  * device configuration changes. This class is not meant to be preserved after process death; for
  * security reasons, the BiometricPromptCompat will automatically stop authentication when the
  * activity is no longer in the foreground.
+ *
  * @hide
  */
 @TargetApi(28)
@@ -69,7 +70,7 @@ public class BiometricFragment extends Fragment {
             new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
                 @Override
                 public void onAuthenticationError(final int errorCode,
-                        final CharSequence errString) {
+                                                  final CharSequence errString) {
                     mClientExecutor.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -82,7 +83,7 @@ public class BiometricFragment extends Fragment {
 
                 @Override
                 public void onAuthenticationHelp(final int helpCode,
-                        final CharSequence helpString) {
+                                                 final CharSequence helpString) {
                     // Don't forward the result to the client, since the dialog takes care of it.
                 }
 
@@ -123,6 +124,7 @@ public class BiometricFragment extends Fragment {
 
     /**
      * Creates a new instance of the {@link BiometricFragment}.
+     *
      * @param bundle
      * @return
      */
@@ -135,12 +137,13 @@ public class BiometricFragment extends Fragment {
     /**
      * Sets the client's callback. This should be done whenever the lifecycle changes (orientation
      * changes).
+     *
      * @param executor
      * @param onClickListener
      * @param authenticationCallback
      */
     protected void setCallbacks(Executor executor, DialogInterface.OnClickListener onClickListener,
-            BiometricPrompt.AuthenticationCallback authenticationCallback) {
+                                BiometricPrompt.AuthenticationCallback authenticationCallback) {
         mClientExecutor = executor;
         mClientNegativeButtonListener = onClickListener;
         mClientAuthenticationCallback = authenticationCallback;
@@ -149,6 +152,7 @@ public class BiometricFragment extends Fragment {
     /**
      * Sets the crypto object to be associated with the authentication. Should be called before
      * adding the fragment to guarantee that it's ready in onCreate().
+     *
      * @param crypto
      */
     protected void setCryptoObject(BiometricPrompt.CryptoObject crypto) {
@@ -200,7 +204,7 @@ public class BiometricFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState) {
+                             Bundle savedInstanceState) {
         // Start the actual authentication when the fragment is attached.
         if (!mShowing) {
             mCancellationSignal = new CancellationSignal();

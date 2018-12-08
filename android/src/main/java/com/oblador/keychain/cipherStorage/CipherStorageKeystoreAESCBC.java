@@ -8,6 +8,7 @@ import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
 import android.support.annotation.NonNull;
 
+import com.facebook.react.bridge.ReadableMap;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 
@@ -33,6 +34,7 @@ import javax.crypto.spec.IvParameterSpec;
 
 @TargetApi(Build.VERSION_CODES.M)
 public class CipherStorageKeystoreAESCBC implements CipherStorage {
+    public static final String PASSCODE_KEYWORD = "Passcode";
     public static final String CIPHER_STORAGE_NAME = "KeystoreAESCBC";
     public static final String DEFAULT_SERVICE = "RN_KEYCHAIN_DEFAULT_ALIAS";
     public static final String KEYSTORE_TYPE = "AndroidKeyStore";
@@ -61,14 +63,16 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
     }
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException {
         service = getDefaultServiceIfEmpty(service);
+
+        Boolean usePasscode = accessControl != null && accessControl.contains(PASSCODE_KEYWORD);
 
         try {
             KeyStore keyStore = getKeyStoreAndLoad();
 
             if (!keyStore.containsAlias(service)) {
-                generateKeyAndStoreUnderAlias(service);
+                generateKeyAndStoreUnderAlias(service, usePasscode);
             }
 
             Key key = keyStore.getKey(service, null);
@@ -86,14 +90,15 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
         }
     }
 
-    private void generateKeyAndStoreUnderAlias(@NonNull String service) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
+    private void generateKeyAndStoreUnderAlias(@NonNull String service, Boolean requireAuthentication) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidAlgorithmParameterException {
         AlgorithmParameterSpec spec = new KeyGenParameterSpec.Builder(
                 service,
                 KeyProperties.PURPOSE_DECRYPT | KeyProperties.PURPOSE_ENCRYPT)
                 .setBlockModes(ENCRYPTION_BLOCK_MODE)
                 .setEncryptionPaddings(ENCRYPTION_PADDING)
                 .setRandomizedEncryptionRequired(true)
-                //.setUserAuthenticationRequired(true) // Will throw InvalidAlgorithmParameterException if there is no fingerprint enrolled on the device
+                .setUserAuthenticationRequired(requireAuthentication ? requireAuthentication : false)
+                .setUserAuthenticationValidityDurationSeconds(1)
                 .setKeySize(ENCRYPTION_KEY_SIZE)
                 .build();
 
@@ -215,5 +220,10 @@ public class CipherStorageKeystoreAESCBC implements CipherStorage {
     @Override
     public void setCurrentActivity(Activity activity) {
         // AESCBC does not need the current activity
+    }
+
+    @Override
+    public final void setPromptText(ReadableMap options) {
+        // Not used here
     }
 }

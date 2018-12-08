@@ -12,11 +12,10 @@ import com.facebook.crypto.CryptoConfig;
 import com.facebook.crypto.Entity;
 import com.facebook.crypto.keychain.KeyChain;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReadableMap;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 
 import java.nio.charset.Charset;
-
-import static android.R.attr.password;
 
 public class CipherStorageFacebookConceal implements CipherStorage {
     public static final String CIPHER_STORAGE_NAME = "FacebookConceal";
@@ -45,7 +44,7 @@ public class CipherStorageFacebookConceal implements CipherStorage {
 
 
     @Override
-    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException {
+    public EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException {
         if (!crypto.isAvailable()) {
             throw new CryptoFailedException("Crypto is missing");
         }
@@ -111,4 +110,10 @@ public class CipherStorageFacebookConceal implements CipherStorage {
     public void setCurrentActivity(Activity activity) {
         // Facebook conceal does not need the current activity
     }
+
+    @Override
+    public final void setPromptText(ReadableMap options) {
+        // Not used here
+    }
+
 }

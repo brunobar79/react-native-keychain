@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.support.annotation.NonNull;
 
+import com.facebook.react.bridge.ReadableMap;
 import com.oblador.keychain.exceptions.CryptoFailedException;
 import com.oblador.keychain.exceptions.KeyStoreAccessException;
 
@@ -37,7 +38,7 @@ public interface CipherStorage {
         public void onDecrypt(DecryptionResult decryptionResult, String error);
     }
 
-    EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password) throws CryptoFailedException;
+    EncryptionResult encrypt(@NonNull String service, @NonNull String username, @NonNull String password, String accessControl) throws CryptoFailedException;
 
     void decrypt(@NonNull DecryptionResultHandler decryptionResultHandler, @NonNull String service, @NonNull byte[] username, @NonNull byte[] password) throws CryptoFailedException, KeyPermanentlyInvalidatedException;
 
@@ -50,5 +51,8 @@ public interface CipherStorage {
     int getMinSupportedApiLevel();
 
     boolean getRequiresCurrentActivity();
+
     void setCurrentActivity(Activity activity);
+
+    void setPromptText(ReadableMap options);
 }

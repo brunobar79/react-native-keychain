@@ -36,6 +36,7 @@ import java.util.concurrent.Executor;
  * across device configuration changes. This class is not meant to be preserved after process death;
  * for security reasons, the BiometricPromptCompat will automatically stop authentication when the
  * activity is no longer in the foreground.
+ *
  * @hide
  */
 public class FingerprintHelperFragment extends Fragment {
@@ -68,7 +69,7 @@ public class FingerprintHelperFragment extends Fragment {
             new FingerprintManagerCompat.AuthenticationCallback() {
                 @Override
                 public void onAuthenticationError(final int errMsgId,
-                        final CharSequence errString) {
+                                                  final CharSequence errString) {
                     if (errMsgId == BiometricPrompt.ERROR_CANCELED) {
                         if (mCanceledFrom == USER_CANCELED_FROM_NONE) {
                             mHandler.obtainMessage(FingerprintDialogFragment.MSG_DISMISS_DIALOG)
@@ -104,7 +105,7 @@ public class FingerprintHelperFragment extends Fragment {
 
                 @Override
                 public void onAuthenticationHelp(final int helpMsgId,
-                        final CharSequence helpString) {
+                                                 final CharSequence helpString) {
                     mHandler.obtainMessage(FingerprintDialogFragment.MSG_SHOW_HELP, helpString)
                             .sendToTarget();
                     // Don't forward the result to the client, since the dialog takes care of it.
@@ -165,7 +166,7 @@ public class FingerprintHelperFragment extends Fragment {
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState) {
+                             Bundle savedInstanceState) {
         if (!mShowing) {
             mCancellationSignal = new CancellationSignal();
             mCanceledFrom = USER_CANCELED_FROM_NONE;
@@ -192,7 +193,7 @@ public class FingerprintHelperFragment extends Fragment {
      * changes).
      */
     protected void setCallback(Executor executor,
-            BiometricPrompt.AuthenticationCallback callback) {
+                               BiometricPrompt.AuthenticationCallback callback) {
         mExecutor = executor;
         mClientAuthenticationCallback = callback;
     }
@@ -206,6 +207,7 @@ public class FingerprintHelperFragment extends Fragment {
 
     /**
      * Cancel the authentication.
+     *
      * @param canceledFrom one of the USER_CANCELED_FROM* constants
      */
     protected void cancel(int canceledFrom) {
@@ -252,6 +254,7 @@ public class FingerprintHelperFragment extends Fragment {
     /**
      * Bypasses the FingerprintManager authentication callback wrapper and sends it directly to the
      * client's callback, since the UI is not even showing yet.
+     *
      * @param error
      */
     private void sendErrorToClient(final int error) {
