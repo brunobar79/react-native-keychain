@@ -19,6 +19,7 @@ package com.oblador.keychain.supportBiometric;
 /**
  * Interface containing all of the biometric modality agnostic constants. These constants must
  * be kept in sync with the platform BiometricConstants.java
+ *
  * @hide
  */
 public interface BiometricConstants {
