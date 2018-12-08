@@ -184,7 +184,9 @@ export function setGenericPassword(
 export function getGenericPassword(
   serviceOrOptions?: string | Options
 ): Promise {
-  return RNKeychainManager.getGenericPasswordForOptions(
+  return Platform.OS === 'ios' ? RNKeychainManager.getGenericPasswordForOptions(
+	getOptionsArgument(serviceOrOptions)
+  ) : RNKeychainManager.getGenericPasswordForOptions(
 	getOptionsArgument(serviceOrOptions),
 	serviceOrOptions
   );
