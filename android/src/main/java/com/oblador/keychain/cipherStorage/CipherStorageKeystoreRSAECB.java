@@ -146,24 +146,6 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     @Override
-    public final void setPromptText(ReadableMap options) {
-
-        if (options != null) {
-            if (options.hasKey(FINGERPRINT_PROMPT_TITLE_KEY)) {
-                mTitle = options.getString(FINGERPRINT_PROMPT_TITLE_KEY);
-            }
-
-            if (options.hasKey(FINGERPRINT_PROMPT_DESC_KEY)) {
-                mSubtitle = options.getString(FINGERPRINT_PROMPT_DESC_KEY);
-            }
-
-            if (options.hasKey(FINGERPRINT_PROMPT_CANCEL_KEY)) {
-                mCancel = options.getString(FINGERPRINT_PROMPT_CANCEL_KEY);
-            }
-        }
-    }
-
-    @Override
     public String getCipherStorageName() {
         return CIPHER_STORAGE_NAME;
     }
@@ -371,6 +353,24 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
             this.key = key;
             this.username = username;
             this.password = password;
+        }
+    }
+
+    @Override
+    public final void setPromptText(ReadableMap options) {
+
+        if (options != null) {
+            if (options.hasKey(FINGERPRINT_PROMPT_TITLE_KEY)) {
+                mTitle = options.getString(FINGERPRINT_PROMPT_TITLE_KEY);
+            }
+
+            if (options.hasKey(FINGERPRINT_PROMPT_DESC_KEY)) {
+                mSubtitle = options.getString(FINGERPRINT_PROMPT_DESC_KEY);
+            }
+
+            if (options.hasKey(FINGERPRINT_PROMPT_CANCEL_KEY)) {
+                mCancel = options.getString(FINGERPRINT_PROMPT_CANCEL_KEY);
+            }
         }
     }
 }

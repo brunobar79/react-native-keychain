@@ -113,7 +113,7 @@ public class CipherStorageFacebookConceal implements CipherStorage {
 
     @Override
     public final void setPromptText(ReadableMap options) {
-        // Not used on here
+        // Not used here
     }
 
 }
