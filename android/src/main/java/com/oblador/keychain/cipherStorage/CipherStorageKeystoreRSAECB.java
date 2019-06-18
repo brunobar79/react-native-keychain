@@ -13,8 +13,8 @@ import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
 import androidx.annotation.NonNull;
 import androidx.annotation.NonNull;
-import android.support.annotation.RequiresApi;
-import android.support.v4.app.FragmentActivity;
+import androidx.annotation.RequiresApi;
+import androidx.fragment.app.FragmentActivity;
 import android.util.Log;
 
 import com.facebook.react.bridge.ReactApplicationContext;
