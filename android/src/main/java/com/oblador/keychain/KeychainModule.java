@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.app.KeyguardManager;
 import android.content.Intent;
 import android.os.Build;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.util.Log;
 
 import com.facebook.react.bridge.ActivityEventListener;

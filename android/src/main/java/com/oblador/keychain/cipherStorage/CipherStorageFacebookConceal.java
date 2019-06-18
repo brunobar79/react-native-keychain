@@ -3,7 +3,7 @@ package com.oblador.keychain.cipherStorage;
 import android.app.Activity;
 import android.os.Build;
 import android.security.keystore.KeyPermanentlyInvalidatedException;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 
 import com.facebook.android.crypto.keychain.AndroidConceal;
 import com.facebook.android.crypto.keychain.SharedPrefsBackedKeyChain;
