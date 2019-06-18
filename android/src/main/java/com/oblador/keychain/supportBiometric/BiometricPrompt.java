@@ -24,7 +24,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.IntDef;
 import androidx.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.text.TextUtils;
@@ -109,7 +109,7 @@ public class BiometricPrompt implements BiometricConstants {
          *
          * @return {@link Signature} object or null if this doesn't contain one.
          */
-        @Nullable
+        @NonNull
         public Signature getSignature() {
             return mSignature;
         }
@@ -119,7 +119,7 @@ public class BiometricPrompt implements BiometricConstants {
          *
          * @return {@link Cipher} object or null if this doesn't contain one.
          */
-        @Nullable
+        @NonNull
         public Cipher getCipher() {
             return mCipher;
         }
@@ -129,7 +129,7 @@ public class BiometricPrompt implements BiometricConstants {
          *
          * @return {@link Mac} object or null if this doesn't contain one.
          */
-        @Nullable
+        @NonNull
         public Mac getMac() {
             return mMac;
         }
@@ -154,7 +154,7 @@ public class BiometricPrompt implements BiometricConstants {
          *
          * @return crypto object provided to {@link #authenticate(PromptInfo, CryptoObject)}.
          */
-        @Nullable
+        @NonNull
         public CryptoObject getCryptoObject() {
             return mCryptoObject;
         }
@@ -219,7 +219,7 @@ public class BiometricPrompt implements BiometricConstants {
              * Optional: Set the subtitle to display.
              */
             @NonNull
-            public Builder setSubtitle(@Nullable CharSequence subtitle) {
+            public Builder setSubtitle(@NonNull CharSequence subtitle) {
                 mBundle.putCharSequence(KEY_SUBTITLE, subtitle);
                 return this;
             }
@@ -228,7 +228,7 @@ public class BiometricPrompt implements BiometricConstants {
              * Optional: Set the description to display.
              */
             @NonNull
-            public Builder setDescription(@Nullable CharSequence description) {
+            public Builder setDescription(@NonNull CharSequence description) {
                 mBundle.putCharSequence(KEY_DESCRIPTION, description);
                 return this;
             }
@@ -289,7 +289,7 @@ public class BiometricPrompt implements BiometricConstants {
         /**
          * @return See {@link Builder#setSubtitle(CharSequence)}.
          */
-        @Nullable
+        @NonNull
         public CharSequence getSubtitle() {
             return mBundle.getCharSequence(KEY_SUBTITLE);
         }
@@ -297,7 +297,7 @@ public class BiometricPrompt implements BiometricConstants {
         /**
          * @return See {@link Builder#setDescription(CharSequence)}.
          */
-        @Nullable
+        @NonNull
         public CharSequence getDescription() {
             return mBundle.getCharSequence(KEY_DESCRIPTION);
         }
@@ -475,7 +475,7 @@ public class BiometricPrompt implements BiometricConstants {
         authenticateInternal(info, null /* crypto */);
     }
 
-    private void authenticateInternal(@NonNull PromptInfo info, @Nullable CryptoObject crypto) {
+    private void authenticateInternal(@NonNull PromptInfo info, @NonNull CryptoObject crypto) {
         final Bundle bundle = info.getBundle();
         final FragmentManager fragmentManager = mFragmentActivity.getSupportFragmentManager();
 

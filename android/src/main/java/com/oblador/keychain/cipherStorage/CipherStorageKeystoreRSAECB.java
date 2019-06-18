@@ -12,7 +12,7 @@ import android.security.keystore.KeyPermanentlyInvalidatedException;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
 import androidx.annotation.NonNull;
-import android.support.annotation.Nullable;
+import androidx.annotation.NonNull;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
@@ -86,7 +86,7 @@ public class CipherStorageKeystoreRSAECB extends AuthenticationCallback implemen
     }
 
     @Override
-    public void onAuthenticationError(int errorCode, @Nullable CharSequence errString) {
+    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
         if (mDecryptParams != null && mDecryptParams.resultHandler != null) {
             mDecryptParams.resultHandler.onDecrypt(null, errString.toString());
             mBiometricPromptCancellationSignal.cancel();
