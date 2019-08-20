@@ -137,7 +137,10 @@ public class KeychainModule extends ReactContextBaseJavaModule {
             promise.resolve(true);
         } catch (EmptyParameterException e) {
             Log.e(KEYCHAIN_MODULE, e.getMessage());
-            promise.reject(E_EMPTY_PARAMETERS, e);
+            // Avoid conflicting with other callbacks
+            if(promise != null) {
+                promise.reject(E_EMPTY_PARAMETERS, e);
+            }
         } catch (CryptoFailedException e) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 if (e.getCause().getCause() != null && e.getCause().getCause().getMessage() == "User not authenticated") {
